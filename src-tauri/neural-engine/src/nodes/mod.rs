@@ -13,7 +13,6 @@ pub struct GraphBlueprint {
     pub edges: Vec<Edge>,
 }
 
-//TODO: make this an enum dispatch to a config trait
 #[enum_dispatch(Config)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum NodeConfig {
