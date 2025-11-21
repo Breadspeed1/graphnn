@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    ops::Deref,
-    sync::Arc,
-};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
@@ -213,9 +209,11 @@ mod tests {
         };
         let edge_id = Id::from("edge1");
 
-        assert!(graph
-            .connect_nodes(source.clone(), target.clone(), edge_id.clone())
-            .is_ok());
+        assert!(
+            graph
+                .connect_nodes(source.clone(), target.clone(), edge_id.clone())
+                .is_ok()
+        );
         assert_eq!(graph.edges.len(), 1);
         assert_eq!(graph.edges[0].id, edge_id);
     }
