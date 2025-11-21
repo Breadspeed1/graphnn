@@ -40,7 +40,7 @@ pub struct HandleRef {
     handle_id: Id,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum DataType {
     IntTensor,
     FloatTensor,
@@ -57,6 +57,9 @@ pub struct HandleDef {
 enum GraphBlueprintError {
     NodeExists(Id),
     NodeDoesNotExist(Id),
+    HandleDoesNotExist(HandleRef),
+    HandleMismatch(HandleRef, HandleRef),
+    EdgeExists(Id),
 }
 
 #[enum_dispatch]
@@ -104,18 +107,39 @@ impl GraphBlueprint {
         &mut self,
         source: HandleRef,
         target: HandleRef,
+        id: Id,
     ) -> Result<(), GraphBlueprintError> {
-        if !self.nodes.contains_key(&source.node_id) {
-            return Err(GraphBlueprintError::NodeDoesNotExist(source.node_id));
+        if self.edges.iter().any(|e| e.id == id) {
+            return Err(GraphBlueprintError::EdgeExists(id));
         }
 
-        if !self.nodes.contains_key(&target.node_id) {
-            return Err(GraphBlueprintError::NodeDoesNotExist(target.node_id));
+        match (
+            self.nodes.get(&source.node_id),
+            self.nodes.get(&target.node_id),
+        ) {
+            (None, _) => Err(GraphBlueprintError::NodeDoesNotExist(source.node_id)),
+            (_, None) => Err(GraphBlueprintError::NodeDoesNotExist(target.node_id)),
+            (Some(source_node), Some(target_node)) => match (
+                source_node
+                    .out_handles()
+                    .iter()
+                    .find(|h| h.id == source.handle_id),
+                target_node
+                    .out_handles()
+                    .iter()
+                    .find(|h| h.id == target.handle_id),
+            ) {
+                (None, _) => Err(GraphBlueprintError::HandleDoesNotExist(source)),
+                (_, None) => Err(GraphBlueprintError::HandleDoesNotExist(target)),
+                (Some(source_handle), Some(target_handle)) => {
+                    if source_handle.dtype == target_handle.dtype {
+                        self.edges.push(Edge { source, target, id });
+                        Ok(())
+                    } else {
+                        Err(GraphBlueprintError::HandleMismatch(source, target))
+                    }
+                }
+            },
         }
-
-        // check if handles exist
-        // check if edge already exists
-
-        todo!()
     }
 }
