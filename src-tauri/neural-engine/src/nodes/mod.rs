@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     ops::Deref,
     sync::Arc,
 };
@@ -11,7 +11,7 @@ use dummy::DummyNode;
 
 pub mod dummy;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GraphBlueprint {
     pub nodes: HashMap<Id, NodeConfig>,
     pub edges: Vec<Edge>,
@@ -19,28 +19,34 @@ pub struct GraphBlueprint {
 
 //TODO: make this an enum dispatch to a config trait
 #[enum_dispatch(Config)]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum NodeConfig {
     DummyNode,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Id(Arc<str>);
 
-#[derive(Serialize, Deserialize, Clone)]
+impl<T: Into<Arc<str>>> From<T> for Id {
+    fn from(s: T) -> Self {
+        Id(s.into())
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Edge {
     source: HandleRef,
     target: HandleRef,
     id: Id,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct HandleRef {
     node_id: Id,
     handle_id: Id,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum DataType {
     IntTensor,
     FloatTensor,
@@ -48,13 +54,14 @@ pub enum DataType {
     Float,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct HandleDef {
     pub id: Id,
     pub dtype: DataType,
 }
 
-enum GraphBlueprintError {
+#[derive(Debug, PartialEq)]
+pub enum GraphBlueprintError {
     NodeExists(Id),
     NodeDoesNotExist(Id),
     HandleDoesNotExist(HandleRef),
@@ -105,9 +112,11 @@ impl GraphBlueprint {
     }
 
     fn disconnect(&mut self, id: Id) -> Result<(), GraphBlueprintError> {
-        match self.edges.pop_if(|e| e.id == id) {
-            Some(_) => Ok(()),
-            None => Err(GraphBlueprintError::EdgeDoesNotExist(id)),
+        if let Some(idx) = self.edges.iter().position(|e| e.id == id) {
+            self.edges.remove(idx);
+            Ok(())
+        } else {
+            Err(GraphBlueprintError::EdgeDoesNotExist(id))
         }
     }
 
@@ -133,7 +142,7 @@ impl GraphBlueprint {
                     .iter()
                     .find(|h| h.id == source.handle_id),
                 target_node
-                    .out_handles()
+                    .in_handles()
                     .iter()
                     .find(|h| h.id == target.handle_id),
             ) {
@@ -149,5 +158,164 @@ impl GraphBlueprint {
                 }
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add_remove_node() {
+        let mut graph = GraphBlueprint::new();
+        let id = Id::from("node1");
+        let config = NodeConfig::DummyNode(DummyNode);
+
+        assert!(graph.add_node(id.clone(), config.clone()).is_ok());
+        assert!(graph.nodes.contains_key(&id));
+
+        // Test duplicate add
+        assert_eq!(
+            graph.add_node(id.clone(), config),
+            Err(GraphBlueprintError::NodeExists(id.clone()))
+        );
+
+        assert!(graph.remove_node(id.clone()).is_ok());
+        assert!(!graph.nodes.contains_key(&id));
+
+        // Test remove non-existent
+        assert_eq!(
+            graph.remove_node(id.clone()),
+            Err(GraphBlueprintError::NodeDoesNotExist(id))
+        );
+    }
+
+    #[test]
+    fn test_connect_nodes_success() {
+        let mut graph = GraphBlueprint::new();
+        let node1_id = Id::from("node1");
+        let node2_id = Id::from("node2");
+
+        graph
+            .add_node(node1_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .unwrap();
+        graph
+            .add_node(node2_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .unwrap();
+
+        let source = HandleRef {
+            node_id: node1_id.clone(),
+            handle_id: Id::from("out_1"),
+        };
+        let target = HandleRef {
+            node_id: node2_id.clone(),
+            handle_id: Id::from("in_1"),
+        };
+        let edge_id = Id::from("edge1");
+
+        assert!(graph
+            .connect_nodes(source.clone(), target.clone(), edge_id.clone())
+            .is_ok());
+        assert_eq!(graph.edges.len(), 1);
+        assert_eq!(graph.edges[0].id, edge_id);
+    }
+
+    #[test]
+    fn test_connect_nodes_failures() {
+        let mut graph = GraphBlueprint::new();
+        let node1_id = Id::from("node1");
+        let node2_id = Id::from("node2");
+
+        graph
+            .add_node(node1_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .unwrap();
+        // node2 not added
+
+        let source = HandleRef {
+            node_id: node1_id.clone(),
+            handle_id: Id::from("out_1"),
+        };
+        let target = HandleRef {
+            node_id: node2_id.clone(),
+            handle_id: Id::from("in_1"),
+        };
+        let edge_id = Id::from("edge1");
+
+        // NodeDoesNotExist (target)
+        assert_eq!(
+            graph.connect_nodes(source.clone(), target.clone(), edge_id.clone()),
+            Err(GraphBlueprintError::NodeDoesNotExist(node2_id.clone()))
+        );
+
+        graph
+            .add_node(node2_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .unwrap();
+
+        // HandleDoesNotExist (source handle wrong)
+        let bad_source = HandleRef {
+            node_id: node1_id.clone(),
+            handle_id: Id::from("wrong_handle"),
+        };
+        assert_eq!(
+            graph.connect_nodes(bad_source.clone(), target.clone(), edge_id.clone()),
+            Err(GraphBlueprintError::HandleDoesNotExist(bad_source))
+        );
+
+        // HandleDoesNotExist (target handle wrong)
+        let bad_target = HandleRef {
+            node_id: node2_id.clone(),
+            handle_id: Id::from("wrong_handle"),
+        };
+        assert_eq!(
+            graph.connect_nodes(source.clone(), bad_target.clone(), edge_id.clone()),
+            Err(GraphBlueprintError::HandleDoesNotExist(bad_target))
+        );
+
+        // EdgeExists
+        graph
+            .connect_nodes(source.clone(), target.clone(), edge_id.clone())
+            .unwrap();
+        assert_eq!(
+            graph.connect_nodes(source.clone(), target.clone(), edge_id.clone()),
+            Err(GraphBlueprintError::EdgeExists(edge_id.clone()))
+        );
+    }
+
+    #[test]
+    fn test_disconnect() {
+        let mut graph = GraphBlueprint::new();
+        let node1_id = Id::from("node1");
+        let node2_id = Id::from("node2");
+
+        graph
+            .add_node(node1_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .unwrap();
+        graph
+            .add_node(node2_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .unwrap();
+
+        let source = HandleRef {
+            node_id: node1_id.clone(),
+            handle_id: Id::from("out_1"),
+        };
+        let target = HandleRef {
+            node_id: node2_id.clone(),
+            handle_id: Id::from("in_1"),
+        };
+        let edge_id = Id::from("edge1");
+
+        graph
+            .connect_nodes(source, target, edge_id.clone())
+            .unwrap();
+        assert_eq!(graph.edges.len(), 1);
+
+        assert!(graph.disconnect(edge_id.clone()).is_ok());
+        assert_eq!(graph.edges.len(), 0);
+
+        // Disconnect non-existent
+        assert_eq!(
+            graph.disconnect(edge_id.clone()),
+            Err(GraphBlueprintError::EdgeDoesNotExist(edge_id))
+        );
     }
 }
