@@ -68,7 +68,13 @@ pub enum RankConstraint {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct TensorShape(Arc<[usize]>);
+pub struct TensorShape(pub Arc<[usize]>);
+
+impl From<Vec<usize>> for TensorShape {
+    fn from(v: Vec<usize>) -> Self {
+        TensorShape(v.into())
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct HandleDef {
@@ -293,9 +299,6 @@ impl GraphBlueprint {
                             },
                         });
                 }
-                Err(e) => {
-                    blueprint.lint.push_error(lint::LintError::ConfigError(e));
-                }
             }
         }
 
@@ -312,7 +315,7 @@ mod tests {
     fn test_add_remove_node() {
         let mut graph = GraphBlueprint::new();
         let id = Id::from("node1");
-        let config = NodeConfig::Dummy(DummyNode);
+        let config = NodeConfig::Dummy(DummyNode::default());
 
         assert!(graph.add_node(id.clone(), config.clone()).is_ok());
         assert!(graph.nodes.contains_key(&id));
@@ -340,10 +343,10 @@ mod tests {
         let node2_id = Id::from("node2");
 
         graph
-            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode))
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode::default()))
             .unwrap();
         graph
-            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode))
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode::default()))
             .unwrap();
 
         let source = HandleRef {
@@ -372,7 +375,7 @@ mod tests {
         let node2_id = Id::from("node2");
 
         graph
-            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode))
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode::default()))
             .unwrap();
         // node2 not added
 
@@ -393,7 +396,7 @@ mod tests {
         );
 
         graph
-            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode))
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode::default()))
             .unwrap();
 
         // HandleDoesNotExist (source handle wrong)
@@ -433,10 +436,10 @@ mod tests {
         let node2_id = Id::from("node2");
 
         graph
-            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode))
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode::default()))
             .unwrap();
         graph
-            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode))
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode::default()))
             .unwrap();
 
         let source = HandleRef {
@@ -462,5 +465,194 @@ mod tests {
             graph.disconnect(edge_id.clone()),
             Err(GraphBlueprintError::EdgeDoesNotExist(edge_id))
         );
+    }
+
+    #[test]
+    fn test_sort_success() {
+        let mut graph = GraphBlueprint::new();
+        let node1_id = Id::from("node1");
+        let node2_id = Id::from("node2");
+        let node3_id = Id::from("node3");
+
+        graph
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode::default()))
+            .unwrap();
+        graph
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode::default()))
+            .unwrap();
+        graph
+            .add_node(node3_id.clone(), NodeConfig::Dummy(DummyNode::default()))
+            .unwrap();
+
+        // node1 -> node2 -> node3
+        graph
+            .connect_nodes(
+                HandleRef {
+                    node_id: node1_id.clone(),
+                    handle_id: Id::from("out_1"),
+                },
+                HandleRef {
+                    node_id: node2_id.clone(),
+                    handle_id: Id::from("in_1"),
+                },
+                Id::from("edge1"),
+            )
+            .unwrap();
+
+        graph
+            .connect_nodes(
+                HandleRef {
+                    node_id: node2_id.clone(),
+                    handle_id: Id::from("out_1"),
+                },
+                HandleRef {
+                    node_id: node3_id.clone(),
+                    handle_id: Id::from("in_1"),
+                },
+                Id::from("edge2"),
+            )
+            .unwrap();
+
+        let sorted = graph.sort();
+        assert!(!sorted.lint.has_blocking_errors());
+        assert_eq!(sorted.nodes.len(), 3);
+        assert_eq!(sorted.nodes[0].0, node1_id);
+        assert_eq!(sorted.nodes[1].0, node2_id);
+        assert_eq!(sorted.nodes[2].0, node3_id);
+    }
+
+    #[test]
+    fn test_sort_cycle() {
+        let mut graph = GraphBlueprint::new();
+        let node1_id = Id::from("node1");
+        let node2_id = Id::from("node2");
+
+        graph
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode::default()))
+            .unwrap();
+        graph
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode::default()))
+            .unwrap();
+
+        // node1 -> node2
+        graph
+            .connect_nodes(
+                HandleRef {
+                    node_id: node1_id.clone(),
+                    handle_id: Id::from("out_1"),
+                },
+                HandleRef {
+                    node_id: node2_id.clone(),
+                    handle_id: Id::from("in_1"),
+                },
+                Id::from("edge1"),
+            )
+            .unwrap();
+
+        // node2 -> node1 (cycle)
+        graph
+            .connect_nodes(
+                HandleRef {
+                    node_id: node2_id.clone(),
+                    handle_id: Id::from("out_1"),
+                },
+                HandleRef {
+                    node_id: node1_id.clone(),
+                    handle_id: Id::from("in_1"),
+                },
+                Id::from("edge2"),
+            )
+            .unwrap();
+
+        let sorted = graph.sort();
+        assert!(sorted.lint.has_blocking_errors());
+        // Check if cycle error is present
+        // Note: LintError::Cycle contains edges, but we just check if there is an error for now
+        // or check the type of error if possible.
+        // Since LintError is in a submodule, we might need to inspect it.
+        // For now, just asserting blocking errors is good.
+    }
+
+    #[test]
+    fn test_infer_shapes_success() {
+        let mut graph = GraphBlueprint::new();
+        let node1_id = Id::from("node1");
+        let node2_id = Id::from("node2");
+
+        // Node 1 is a source with fixed output shape
+        let shape = TensorShape::from(vec![1, 3, 224, 224]);
+        let mut source_node = DummyNode::default();
+        source_node.fixed_output = Some(shape.clone());
+
+        graph
+            .add_node(node1_id.clone(), NodeConfig::Dummy(source_node))
+            .unwrap();
+        graph
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode::default()))
+            .unwrap();
+
+        // node1 -> node2
+        let edge_id = Id::from("edge1");
+        graph
+            .connect_nodes(
+                HandleRef {
+                    node_id: node1_id.clone(),
+                    handle_id: Id::from("out_1"),
+                },
+                HandleRef {
+                    node_id: node2_id.clone(),
+                    handle_id: Id::from("in_1"),
+                },
+                edge_id.clone(),
+            )
+            .unwrap();
+
+        let sorted = graph.sort();
+        assert!(!sorted.lint.has_blocking_errors());
+
+        let inferred = graph.infer_shapes(sorted);
+        assert!(!inferred.lint.has_blocking_errors());
+
+        // Check if edge has shape
+        assert_eq!(inferred.edges.len(), 1);
+        assert_eq!(inferred.edges[0].0, edge_id);
+        assert_eq!(inferred.edges[0].1, shape);
+    }
+
+    #[test]
+    fn test_infer_shapes_failure() {
+        let mut graph = GraphBlueprint::new();
+        let node1_id = Id::from("node1");
+        let node2_id = Id::from("node2");
+
+        // Node 1 is NOT a source (no fixed output), so it will fail to infer its output because it has no inputs
+        graph
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode::default()))
+            .unwrap();
+        graph
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode::default()))
+            .unwrap();
+
+        // node1 -> node2
+        graph
+            .connect_nodes(
+                HandleRef {
+                    node_id: node1_id.clone(),
+                    handle_id: Id::from("out_1"),
+                },
+                HandleRef {
+                    node_id: node2_id.clone(),
+                    handle_id: Id::from("in_1"),
+                },
+                Id::from("edge1"),
+            )
+            .unwrap();
+
+        let sorted = graph.sort();
+        assert!(!sorted.lint.has_blocking_errors());
+
+        let inferred = graph.infer_shapes(sorted);
+        // Should have errors because node1 cannot infer output
+        assert!(inferred.lint.has_blocking_errors());
     }
 }

@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::nodes::{Config, ConfigError, DataType, HandleDef, Id, TensorShape};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct DummyNode;
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct DummyNode {
+    pub fixed_output: Option<TensorShape>,
+}
 
 impl Config for DummyNode {
     fn in_handles(&self) -> Vec<HandleDef> {
@@ -26,6 +28,10 @@ impl Config for DummyNode {
         &self,
         input_shapes: &HashMap<Id, TensorShape>,
     ) -> Result<HashMap<Id, TensorShape>, ConfigError> {
+        if let Some(shape) = &self.fixed_output {
+            return Ok(HashMap::from([(Id::from("out_1"), shape.clone())]));
+        }
+
         let in_shape = input_shapes.get(&Id::from("in_1"));
         Ok(HashMap::from([(
             Id::from("out_1"),
