@@ -16,7 +16,7 @@ pub struct GraphBlueprint {
 #[enum_dispatch(Config)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum NodeConfig {
-    DummyNode,
+    Dummy(DummyNode),
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug)]
@@ -182,7 +182,7 @@ mod tests {
     fn test_add_remove_node() {
         let mut graph = GraphBlueprint::new();
         let id = Id::from("node1");
-        let config = NodeConfig::DummyNode(DummyNode);
+        let config = NodeConfig::Dummy(DummyNode);
 
         assert!(graph.add_node(id.clone(), config.clone()).is_ok());
         assert!(graph.nodes.contains_key(&id));
@@ -210,10 +210,10 @@ mod tests {
         let node2_id = Id::from("node2");
 
         graph
-            .add_node(node1_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode))
             .unwrap();
         graph
-            .add_node(node2_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode))
             .unwrap();
 
         let source = HandleRef {
@@ -242,7 +242,7 @@ mod tests {
         let node2_id = Id::from("node2");
 
         graph
-            .add_node(node1_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode))
             .unwrap();
         // node2 not added
 
@@ -263,7 +263,7 @@ mod tests {
         );
 
         graph
-            .add_node(node2_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode))
             .unwrap();
 
         // HandleDoesNotExist (source handle wrong)
@@ -303,10 +303,10 @@ mod tests {
         let node2_id = Id::from("node2");
 
         graph
-            .add_node(node1_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .add_node(node1_id.clone(), NodeConfig::Dummy(DummyNode))
             .unwrap();
         graph
-            .add_node(node2_id.clone(), NodeConfig::DummyNode(DummyNode))
+            .add_node(node2_id.clone(), NodeConfig::Dummy(DummyNode))
             .unwrap();
 
         let source = HandleRef {
