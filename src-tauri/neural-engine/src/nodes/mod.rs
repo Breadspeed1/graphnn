@@ -45,9 +45,17 @@ pub struct HandleRef {
 pub enum DataType {
     IntTensor,
     FloatTensor,
-    Int,
-    Float,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum RankConstraint {
+    Any,
+    Fixed(usize),
+    MatchHandle(Id),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TensorShape(Arc<[usize]>);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct HandleDef {
@@ -63,12 +71,22 @@ pub enum GraphBlueprintError {
     HandleMismatch(HandleRef, HandleRef),
     EdgeExists(Id),
     EdgeDoesNotExist(Id),
+    UnableToInferTensorShape(HandleRef),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ConfigError {
+    MissingInputShape(Id),
 }
 
 #[enum_dispatch]
 trait Config {
     fn in_handles(&self) -> Vec<HandleDef>;
     fn out_handles(&self) -> Vec<HandleDef>;
+    fn infer_output_shapes(
+        &self,
+        input_shapes: &HashMap<Id, TensorShape>,
+    ) -> Result<HashMap<Id, TensorShape>, ConfigError>;
 }
 
 impl Deref for Id {
