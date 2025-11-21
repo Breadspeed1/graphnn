@@ -1,9 +1,15 @@
-use std::{collections::HashMap, ops::Deref, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    ops::Deref,
+    sync::Arc,
+};
 
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
 
 use dummy::DummyNode;
+
+use crate::nodes::lint::LintOutput;
 
 pub mod dummy;
 pub mod lint;
@@ -12,6 +18,12 @@ pub mod lint;
 pub struct GraphBlueprint {
     pub nodes: HashMap<Id, NodeConfig>,
     pub edges: Vec<Edge>,
+}
+
+pub struct SortedGraphBlueprint {
+    pub nodes: Vec<(Id, NodeConfig)>,
+    pub edges: Vec<(Edge, TensorShape)>,
+    pub lint: LintOutput,
 }
 
 #[enum_dispatch(Config)]
@@ -99,14 +111,14 @@ impl Deref for Id {
 }
 
 impl GraphBlueprint {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
             edges: Vec::new(),
         }
     }
 
-    fn add_node(&mut self, id: Id, config: NodeConfig) -> Result<(), GraphBlueprintError> {
+    pub fn add_node(&mut self, id: Id, config: NodeConfig) -> Result<(), GraphBlueprintError> {
         if self.nodes.contains_key(&id) {
             return Err(GraphBlueprintError::NodeExists(id));
         }
@@ -116,7 +128,7 @@ impl GraphBlueprint {
         Ok(())
     }
 
-    fn remove_node(&mut self, id: Id) -> Result<(), GraphBlueprintError> {
+    pub fn remove_node(&mut self, id: Id) -> Result<(), GraphBlueprintError> {
         let result = self.nodes.remove(&id);
 
         match result {
@@ -125,7 +137,7 @@ impl GraphBlueprint {
         }
     }
 
-    fn disconnect(&mut self, id: Id) -> Result<(), GraphBlueprintError> {
+    pub fn disconnect(&mut self, id: Id) -> Result<(), GraphBlueprintError> {
         if let Some(idx) = self.edges.iter().position(|e| e.id == id) {
             self.edges.remove(idx);
             Ok(())
@@ -134,7 +146,7 @@ impl GraphBlueprint {
         }
     }
 
-    fn connect_nodes(
+    pub fn connect_nodes(
         &mut self,
         source: HandleRef,
         target: HandleRef,
@@ -171,6 +183,71 @@ impl GraphBlueprint {
                     }
                 }
             },
+        }
+    }
+
+    pub fn sort(&self) -> SortedGraphBlueprint {
+        let mut sorted_nodes = Vec::new();
+        let mut lint = LintOutput::default();
+
+        let mut adj: HashMap<Id, Vec<&Edge>> = HashMap::new();
+        let mut in_degree: HashMap<Id, usize> = HashMap::new();
+
+        for id in self.nodes.keys() {
+            in_degree.insert(id.clone(), 0);
+            adj.insert(id.clone(), Vec::new());
+        }
+
+        for edge in &self.edges {
+            if let Some(list) = adj.get_mut(&edge.source.node_id) {
+                list.push(edge);
+            }
+            if let Some(count) = in_degree.get_mut(&edge.target.node_id) {
+                *count += 1;
+            }
+        }
+
+        let mut queue: VecDeque<Id> = in_degree
+            .iter()
+            .filter(|(_, count)| **count == 0)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        while let Some(node_id) = queue.pop_front() {
+            if let Some(config) = self.nodes.get(&node_id) {
+                sorted_nodes.push((node_id.clone(), config.clone()));
+            }
+
+            if let Some(outgoing_edges) = adj.get(&node_id) {
+                for edge in outgoing_edges {
+                    let target = &edge.target.node_id;
+
+                    if let Some(count) = in_degree.get_mut(target) {
+                        *count -= 1;
+                        // If this was the last dependency, add to queue
+                        if *count == 0 {
+                            queue.push_back(target.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        if sorted_nodes.len() != self.nodes.len() {
+            let cycle_edges: Vec<Id> = self
+                .edges
+                .iter()
+                .filter(|e| *in_degree.get(&e.target.node_id).unwrap_or(&0) > 0)
+                .map(|e| e.id.clone())
+                .collect();
+
+            lint.push_error(lint::LintError::Cycle { edges: cycle_edges });
+        }
+
+        SortedGraphBlueprint {
+            nodes: sorted_nodes,
+            edges: todo!(),
+            lint,
         }
     }
 }

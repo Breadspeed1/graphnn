@@ -11,16 +11,11 @@ pub enum LintError {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct LintOutput {
-    pub shapes: Vec<(Id, TensorShape)>,
     pub errors: Vec<LintError>,
 }
 
 impl LintOutput {
-    fn push_shape(&mut self, id: Id, shape: TensorShape) {
-        self.shapes.push((id, shape));
-    }
-
-    fn push_error(&mut self, error: LintError) {
+    pub fn push_error(&mut self, error: LintError) {
         self.errors.push(error);
     }
 }
