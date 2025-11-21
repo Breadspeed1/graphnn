@@ -60,6 +60,7 @@ enum GraphBlueprintError {
     HandleDoesNotExist(HandleRef),
     HandleMismatch(HandleRef, HandleRef),
     EdgeExists(Id),
+    EdgeDoesNotExist(Id),
 }
 
 #[enum_dispatch]
@@ -100,6 +101,13 @@ impl GraphBlueprint {
         match result {
             Some(_) => Ok(()),
             None => Err(GraphBlueprintError::NodeDoesNotExist(id)),
+        }
+    }
+
+    fn disconnect(&mut self, id: Id) -> Result<(), GraphBlueprintError> {
+        match self.edges.pop_if(|e| e.id == id) {
+            Some(_) => Ok(()),
+            None => Err(GraphBlueprintError::EdgeDoesNotExist(id)),
         }
     }
 
