@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::nodes::{ConfigError, HandleRef, Id, TensorShape};
+use crate::nodes::{ConfigError, HandleRef, Id};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum LintError {
