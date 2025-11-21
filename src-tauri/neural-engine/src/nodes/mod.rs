@@ -22,7 +22,7 @@ pub struct GraphBlueprint {
 
 pub struct SortedGraphBlueprint {
     pub nodes: Vec<(Id, NodeConfig)>,
-    pub edges: Vec<(Edge, TensorShape)>,
+    pub edges: Vec<(Id, TensorShape)>,
     pub lint: LintOutput,
 }
 
@@ -48,7 +48,7 @@ pub struct Edge {
     id: Id,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HandleRef {
     node_id: Id,
     handle_id: Id,
@@ -87,7 +87,7 @@ pub enum GraphBlueprintError {
     UnableToInferTensorShape(HandleRef),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum ConfigError {
     MissingInputShape(Id),
 }
@@ -224,7 +224,7 @@ impl GraphBlueprint {
 
                     if let Some(count) = in_degree.get_mut(target) {
                         *count -= 1;
-                        // If this was the last dependency, add to queue
+
                         if *count == 0 {
                             queue.push_back(target.clone());
                         }
@@ -246,9 +246,61 @@ impl GraphBlueprint {
 
         SortedGraphBlueprint {
             nodes: sorted_nodes,
-            edges: todo!(),
+            edges: vec![],
             lint,
         }
+    }
+
+    pub fn infer_shapes(&self, mut blueprint: SortedGraphBlueprint) -> SortedGraphBlueprint {
+        if blueprint.lint.has_blocking_errors() {
+            return blueprint;
+        }
+
+        let mut resolved_shapes: HashMap<HandleRef, TensorShape> = HashMap::new();
+
+        let mut edges_with_shapes = Vec::new();
+
+        for (node_id, config) in &blueprint.nodes {
+            let mut inputs = HashMap::new();
+
+            for edge in &self.edges {
+                if &edge.target.node_id == node_id {
+                    if let Some(shape) = resolved_shapes.get(&edge.source) {
+                        inputs.insert(edge.target.handle_id.clone(), shape.clone());
+
+                        edges_with_shapes.push((edge.id.clone(), shape.clone()));
+                    }
+                }
+            }
+
+            match config.infer_output_shapes(&inputs) {
+                Ok(outputs) => {
+                    for (handle_id, shape) in outputs {
+                        let ref_key = HandleRef {
+                            node_id: node_id.clone(),
+                            handle_id,
+                        };
+                        resolved_shapes.insert(ref_key, shape);
+                    }
+                }
+                Err(ConfigError::MissingInputShape(id)) => {
+                    blueprint
+                        .lint
+                        .push_error(lint::LintError::UnInferrableTensorShape {
+                            handle: HandleRef {
+                                node_id: node_id.clone(),
+                                handle_id: id,
+                            },
+                        });
+                }
+                Err(e) => {
+                    blueprint.lint.push_error(lint::LintError::ConfigError(e));
+                }
+            }
+        }
+
+        blueprint.edges = edges_with_shapes;
+        blueprint
     }
 }
 
