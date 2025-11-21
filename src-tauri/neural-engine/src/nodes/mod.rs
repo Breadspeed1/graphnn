@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use dummy::DummyNode;
 
 pub mod dummy;
+pub mod lint;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GraphBlueprint {
@@ -54,7 +55,7 @@ pub enum RankConstraint {
     MatchHandle(Id),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TensorShape(Arc<[usize]>);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
