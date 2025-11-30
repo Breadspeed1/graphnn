@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::nodes::{Config, ConfigError, DataType, HandleDef, Id, TensorShape};
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, JsonSchema)]
 pub struct DummyNode {
     pub fixed_output: Option<TensorShape>,
 }

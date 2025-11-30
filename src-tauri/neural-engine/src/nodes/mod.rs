@@ -5,6 +5,7 @@ use std::{
 };
 
 use enum_dispatch::enum_dispatch;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use dummy::DummyNode;
@@ -67,7 +68,7 @@ pub enum RankConstraint {
     MatchHandle(Id),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TensorShape(pub Arc<[usize]>);
 
 impl From<Vec<usize>> for TensorShape {
@@ -99,7 +100,7 @@ pub enum ConfigError {
 }
 
 #[enum_dispatch]
-trait Config {
+pub trait Config {
     fn in_handles(&self) -> Vec<HandleDef>;
     fn out_handles(&self) -> Vec<HandleDef>;
     fn infer_output_shapes(
