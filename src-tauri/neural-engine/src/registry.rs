@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use burn::config::Config;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
@@ -7,12 +5,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 pub struct RegistryEntry {
     schema: Schema,
-    name: Arc<str>,
-    description: Arc<str>,
+    name: String,
+    description: String,
 }
 
 impl RegistryEntry {
-    pub fn for_config<C: JsonSchema + Config>(name: Arc<str>, description: Arc<str>) -> Self {
+    pub fn for_config<C: JsonSchema + Config>(name: String, description: String) -> Self {
         Self {
             name,
             description,
