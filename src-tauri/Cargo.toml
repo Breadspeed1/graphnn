@@ -1,6 +1,0 @@
-[workspace]
-resolver = "2"
-members = ["app", "neural-engine"]
-
-# This tells 'cargo run' which one is the executable by default
-default-members = ["app"]
