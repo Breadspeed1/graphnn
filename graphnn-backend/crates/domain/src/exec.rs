@@ -40,6 +40,17 @@ impl<B: Backend> Arena<B> {
         }
     }
 
+    pub fn read_all(&mut self, slots: &[usize]) -> Result<Vec<TensorAny<B>>, ArenaError> {
+        slots.iter().map(|&s| self.read(s)).collect()
+    }
+
+    pub fn write_all(&mut self, slots: &[usize], values: Vec<TensorAny<B>>) {
+        slots
+            .iter()
+            .zip(values)
+            .for_each(|(&slot, value)| self.write(slot, value));
+    }
+
     pub fn write(&mut self, slot: usize, value: TensorAny<B>) {
         self.mem[slot] = Some(value);
     }
