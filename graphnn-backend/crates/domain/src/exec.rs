@@ -35,7 +35,6 @@ pub struct Arena<B: Backend> {
 pub struct Executor<B: Backend> {
     mem: Arena<B>,
     graph: CompiledGraph,
-    nodes: Vec<CompiledNode>,
     ops: Vec<Box<dyn Op<B>>>,
 }
 
