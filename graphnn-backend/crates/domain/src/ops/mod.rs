@@ -5,6 +5,12 @@ use enum_dispatch::enum_dispatch;
 
 use crate::tensor::TensorAny;
 
+pub struct OpArity {
+    inputs: u32,
+    outputs: u32,
+    params: u32,
+}
+
 #[derive(Debug)]
 pub enum OpError {
     CannotInferShapes(&'static str),
@@ -18,7 +24,7 @@ pub struct NoOp<B: Backend> {
 pub trait Op<B: Backend> {
     fn name(&self) -> &'static str;
 
-    fn arity(&self) -> (usize, usize);
+    fn arity(&self) -> OpArity;
 
     fn init_params(&self, device: &B::Device, input_shapes: &[Shape]) -> Vec<TensorAny<B>>;
 
@@ -36,8 +42,12 @@ impl<B: Backend> Op<B> for NoOp<B> {
         "No Operation"
     }
 
-    fn arity(&self) -> (usize, usize) {
-        (1, 1)
+    fn arity(&self) -> OpArity {
+        OpArity {
+            inputs: 1,
+            outputs: 1,
+            params: 0,
+        }
     }
 
     fn init_params(
