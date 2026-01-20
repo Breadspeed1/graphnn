@@ -1,10 +1,6 @@
 use burn::prelude::Backend;
 
-use crate::{
-    compile::{CompiledGraph, CompiledNode},
-    ops::Op,
-    tensor::TensorAny,
-};
+use crate::{compile::CompiledGraph, tensor::TensorAny};
 
 #[derive(Debug)]
 pub enum ArenaError {
@@ -34,8 +30,7 @@ pub struct Arena<B: Backend> {
 
 pub struct Executor<B: Backend> {
     mem: Arena<B>,
-    graph: CompiledGraph,
-    ops: Vec<Box<dyn Op<B>>>,
+    graph: CompiledGraph<B>,
 }
 
 impl ArenaError {

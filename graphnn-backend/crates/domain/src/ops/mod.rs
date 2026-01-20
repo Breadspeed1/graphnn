@@ -16,9 +16,7 @@ pub enum OpError {
     CannotInferShapes(&'static str),
 }
 
-pub struct NoOp<B: Backend> {
-    _p: PhantomData<B>,
-}
+pub struct NoOp<B: Backend>(PhantomData<B>);
 
 #[enum_dispatch]
 pub trait Op<B: Backend> {
@@ -28,11 +26,7 @@ pub trait Op<B: Backend> {
 
     fn init_params(&self, device: &B::Device, input_shapes: &[Shape]) -> Vec<TensorAny<B>>;
 
-    fn infer_shapes(
-        &self,
-        input_shapes: &[Shape],
-        param_shapes: &[Shape],
-    ) -> Result<Vec<Shape>, OpError>;
+    fn infer_shapes(&self, input_shapes: &[Shape]) -> Result<Vec<Shape>, OpError>;
 
     fn evaluate(&self, inputs: &[TensorAny<B>], params: &[TensorAny<B>]) -> Vec<TensorAny<B>>;
 }
@@ -58,11 +52,7 @@ impl<B: Backend> Op<B> for NoOp<B> {
         vec![]
     }
 
-    fn infer_shapes(
-        &self,
-        input_shapes: &[Shape],
-        _param_shapes: &[Shape],
-    ) -> Result<Vec<Shape>, OpError> {
+    fn infer_shapes(&self, input_shapes: &[Shape]) -> Result<Vec<Shape>, OpError> {
         Ok(vec![input_shapes[0].clone()])
     }
 
